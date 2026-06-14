@@ -501,9 +501,11 @@ export function App() {
                         <span>{formatDate(item.modified_ms)}</span>
                       </>
                     ) : (
-                      <span className="name">
-                        {getIcon(item, 18)} {highlightText(item.name)}
-                      </span>
+                      <div>
+                        <span className="name">
+                          {getIcon(item, 18)} {highlightText(item.name)}
+                        </span>
+                      </div>
                     )}
                   </div>
                 );
