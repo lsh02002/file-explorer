@@ -309,7 +309,10 @@ export function App() {
 
   return (
     <main className="d-flex vh-100 bg-light text-dark">
-      <aside className="border-end bg-white p-3" style={{ width: 260 }}>
+      <aside
+        className="border-end bg-white p-3 d-flex flex-column"
+        style={{ width: 260, height: "100%" }}
+      >
         <button
           className="btn btn-outline-secondary w-100 mb-3"
           onClick={chooseFolder}
@@ -318,7 +321,7 @@ export function App() {
         </button>
 
         <div
-          className={`p-2 rounded text-truncate cursor-pointer ${
+          className={`p-2 rounded cursor-pointer ${
             currentPath === rootPath ? "bg-primary text-white" : "bg-light"
           }`}
           onClick={() => rootPath && loadDir(rootPath)}
@@ -328,7 +331,7 @@ export function App() {
 
         <div className="mt-3 mb-2 fw-bold text-secondary small">하위 폴더</div>
 
-        <div className="overflow-auto">
+        <div className="overflow-auto flex-grow-1">
           {folders.map((folder) => (
             <div
               key={folder.path}
@@ -390,7 +393,7 @@ export function App() {
           </button>
         </header>
 
-        <section className="px-3 py-2 bg-body-tertiary border-bottom text-truncate">
+        <section className="px-3 py-2 bg-body-tertiary border-bottom">
           <strong>현재:</strong>{" "}
           <span>{currentPath || "폴더를 선택하세요"}</span>
         </section>
@@ -472,19 +475,11 @@ export function App() {
                 return (
                   <div
                     key={virtualRow.key}
-                    className="iconVirtualRow"
+                    className="position-absolute top-0 start-0 w-100 d-grid gap-3 px-3 py-2"
                     style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
                       height: `${rowHeight}px`,
                       transform: `translateY(${virtualRow.start}px)`,
-                      display: "grid",
                       gridTemplateColumns: `repeat(${columnCount}, ${cardWidth}px)`,
-                      gap: "12px",
-                      padding: "8px 16px",
-                      boxSizing: "border-box",
                     }}
                   >
                     {rowItems.map((item) => (
@@ -528,12 +523,14 @@ export function App() {
         ) : (
           <section
             ref={parentRef}
-            className={`list ${viewMode} flex-grow-1 overflow-auto bg-white`}
+            className={`flex-grow-1 overflow-auto bg-white ${
+              viewMode === "details" ? "small" : ""
+            }`}
           >
             <div
+              className="position-relative"
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
-                position: "relative",
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -544,14 +541,13 @@ export function App() {
                     key={item.path}
                     data-index={virtualRow.index}
                     ref={rowVirtualizer.measureElement}
-                    className={`position-absolute w-100 px-3 py-2 border-bottom ${
+                    className={`position-absolute top-0 start-0 w-100 px-3 py-2 border-bottom ${
                       selected?.path === item.path
                         ? "bg-primary-subtle"
                         : "bg-white"
                     }`}
+                    role="button"
                     style={{
-                      top: 0,
-                      left: 0,
                       minHeight: `${virtualRow.size}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
@@ -568,14 +564,14 @@ export function App() {
                         </div>
 
                         <div
-                          className="small text-secondary flex-shrink-0 text-end"
+                          className="text-secondary flex-shrink-0 text-end"
                           style={{ width: "120px" }}
                         >
                           {formatSize(item.size)}
                         </div>
 
                         <div
-                          className="small text-secondary flex-shrink-0 text-truncate"
+                          className="text-secondary flex-shrink-0 text-wrap"
                           style={{
                             width: "220px",
                             maxWidth: "35%",
@@ -586,9 +582,11 @@ export function App() {
                         </div>
                       </div>
                     ) : (
-                      <div className="d-flex align-items-center gap-2">
+                      <div className="d-flex align-items-center gap-2 overflow-hidden">
                         {getIcon(item, 18)}
-                        <span>{highlightText(item.name)}</span>
+                        <span className="text-truncate">
+                          {highlightText(item.name)}
+                        </span>
                       </div>
                     )}
                   </div>
