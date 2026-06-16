@@ -439,7 +439,9 @@ export function App() {
         </section>
 
         {error && (
-          <pre className="alert alert-danger m-3 overflow-auto">{error}</pre>
+          <section className="bg-white border-bottom fw-semibold small">
+            <div className="alert alert-danger m-3">{error}</div>
+          </section>
         )}
 
         {viewMode === "details" && (
