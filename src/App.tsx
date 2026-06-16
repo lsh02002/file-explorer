@@ -308,24 +308,34 @@ export function App() {
   };
 
   return (
-    <main className="app">
-      <aside className="sidebar">
-        <button onClick={chooseFolder}>폴더 열기</button>
+    <main className="d-flex vh-100 bg-light text-dark">
+      <aside className="border-end bg-white p-3" style={{ width: 260 }}>
+        <button
+          className="btn btn-outline-secondary w-100 mb-3"
+          onClick={chooseFolder}
+        >
+          폴더 열기
+        </button>
 
         <div
-          className={`sideRoot ${currentPath === rootPath ? "active" : ""}`}
+          className={`p-2 rounded text-truncate cursor-pointer ${
+            currentPath === rootPath ? "bg-primary text-white" : "bg-light"
+          }`}
           onClick={() => rootPath && loadDir(rootPath)}
         >
           📁 {rootPath || "폴더를 선택하세요"}
         </div>
 
-        <div className="sideTitle">하위 폴더</div>
+        <div className="mt-3 mb-2 fw-bold text-secondary small">하위 폴더</div>
 
-        <div className="sideList">
+        <div className="overflow-auto">
           {folders.map((folder) => (
             <div
               key={folder.path}
-              className={`sideItem ${currentPath === folder.path ? "active" : ""}`}
+              className={`p-2 rounded text-truncate ${
+                currentPath === folder.path ? "bg-primary text-white" : ""
+              }`}
+              role="button"
               onClick={() => loadDir(folder.path)}
             >
               📁 {folder.name}
@@ -334,43 +344,70 @@ export function App() {
         </div>
       </aside>
 
-      <section className="mainPanel">
-        <header className="toolbar">
-          <button onClick={goParent} disabled={!currentPath}>
+      <section className="d-flex flex-column flex-grow-1 overflow-hidden">
+        <header className="d-flex flex-wrap gap-2 p-3 bg-white border-bottom">
+          <button
+            className="btn btn-outline-secondary"
+            onClick={goParent}
+            disabled={!currentPath}
+          >
             상위
           </button>
-          <button onClick={refresh} disabled={!currentPath}>
+          <button
+            className="btn btn-outline-secondary"
+            onClick={refresh}
+            disabled={!currentPath}
+          >
             새로고침
           </button>
-          <button onClick={() => create("file")} disabled={!currentPath}>
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => create("file")}
+            disabled={!currentPath}
+          >
             파일 생성
           </button>
-          <button onClick={() => create("dir")} disabled={!currentPath}>
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => create("dir")}
+            disabled={!currentPath}
+          >
             폴더 생성
           </button>
-          <button onClick={renameSelected} disabled={!selected}>
+          <button
+            className="btn btn-outline-secondary"
+            onClick={renameSelected}
+            disabled={!selected}
+          >
             이름 변경
           </button>
-          <button onClick={deleteSelected} disabled={!selected}>
+          <button
+            className="btn btn-outline-danger"
+            onClick={deleteSelected}
+            disabled={!selected}
+          >
             삭제
           </button>
         </header>
 
-        <section className="pathbar">
+        <section className="px-3 py-2 bg-body-tertiary border-bottom text-truncate">
           <strong>현재:</strong>{" "}
           <span>{currentPath || "폴더를 선택하세요"}</span>
         </section>
 
-        <section className="controls">
+        <section className="d-flex gap-2 align-items-center p-3 bg-white border-bottom">
           <input
+            className="form-control"
             placeholder="현재 폴더에서 검색"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </section>
 
-        <section className="controls">
+        <section className="d-flex gap-2 align-items-center p-3 bg-white border-bottom">
           <select
+            className="form-select"
+            style={{ width: 140 }}
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
           >
@@ -380,6 +417,8 @@ export function App() {
           </select>
 
           <select
+            className="form-select"
+            style={{ width: 150 }}
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value as ViewMode)}
           >
@@ -389,25 +428,32 @@ export function App() {
             <option value="list">간단히</option>
           </select>
 
-          <span>
+          <span className="text-secondary small">
             {loading
               ? "로딩 중..."
               : `${visibleItems.length.toLocaleString()}개 표시 / ${items.length.toLocaleString()}개 전체`}
           </span>
         </section>
 
-        {error && <pre className="error">{error}</pre>}
+        {error && (
+          <pre className="alert alert-danger m-3 overflow-auto">{error}</pre>
+        )}
 
         {viewMode === "details" && (
-          <section className="tableHeader">
-            <span>이름</span>
-            <span>크기</span>
-            <span>수정일</span>
+          <section className="bg-light border-bottom fw-semibold small px-3 py-2">
+            <div className="row g-0">
+              <div className="col">이름</div>
+              <div className="col-2">크기</div>
+              <div className="col-3">수정일</div>
+            </div>
           </section>
         )}
 
         {viewMode === "large-icons" || viewMode === "icons" ? (
-          <section ref={iconListRef} className={`iconView ${viewMode}`}>
+          <section
+            ref={iconListRef}
+            className={`iconView ${viewMode} flex-grow-1 overflow-auto bg-white`}
+          >
             <div
               style={{
                 height: `${iconVirtualizer.getTotalSize()}px`,
@@ -444,15 +490,32 @@ export function App() {
                     {rowItems.map((item) => (
                       <div
                         key={item.path}
-                        className={`iconCard ${
-                          selected?.path === item.path ? "selected" : ""
+                        className={`card border-0 h-100 p-2 text-center rounded-3 ${
+                          selected?.path === item.path
+                            ? "bg-primary-subtle"
+                            : "bg-white"
                         }`}
+                        role="button"
                         onClick={() => setSelected(item)}
                         onDoubleClick={() => item.is_dir && loadDir(item.path)}
                       >
-                        <div className="icon">{getIcon(item, iconSize)}</div>
+                        <div
+                          className="d-flex align-items-center justify-content-center"
+                          style={{
+                            height: viewMode === "large-icons" ? 70 : 38,
+                          }}
+                        >
+                          {getIcon(item, iconSize)}
+                        </div>
 
-                        <div className="iconName">
+                        <div
+                          className="mt-2 small text-break overflow-hidden"
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                          }}
+                        >
                           {highlightText(item.name)}
                         </div>
                       </div>
@@ -463,7 +526,10 @@ export function App() {
             </div>
           </section>
         ) : (
-          <section ref={parentRef} className={`list ${viewMode}`}>
+          <section
+            ref={parentRef}
+            className={`list ${viewMode} flex-grow-1 overflow-auto bg-white`}
+          >
             <div
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
@@ -478,33 +544,51 @@ export function App() {
                     key={item.path}
                     data-index={virtualRow.index}
                     ref={rowVirtualizer.measureElement}
-                    className={`row ${
-                      selected?.path === item.path ? "selected" : ""
+                    className={`position-absolute w-100 px-3 py-2 border-bottom ${
+                      selected?.path === item.path
+                        ? "bg-primary-subtle"
+                        : "bg-white"
                     }`}
                     style={{
-                      position: "absolute",
                       top: 0,
                       left: 0,
-                      width: "100%",
-                      height: `${virtualRow.size}px`,
+                      minHeight: `${virtualRow.size}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
                     onClick={() => setSelected(item)}
                     onDoubleClick={() => item.is_dir && loadDir(item.path)}
                   >
                     {viewMode === "details" ? (
-                      <>
-                        <span className="name">
-                          {getIcon(item, 18)} {highlightText(item.name)}
-                        </span>
-                        <span>{formatSize(item.size)}</span>
-                        <span>{formatDate(item.modified_ms)}</span>
-                      </>
+                      <div className="d-flex align-items-start gap-3">
+                        <div className="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+                          {getIcon(item, 18)}
+                          <span className="text-truncate">
+                            {highlightText(item.name)}
+                          </span>
+                        </div>
+
+                        <div
+                          className="small text-secondary flex-shrink-0 text-end"
+                          style={{ width: "120px" }}
+                        >
+                          {formatSize(item.size)}
+                        </div>
+
+                        <div
+                          className="small text-secondary flex-shrink-0 text-truncate"
+                          style={{
+                            width: "220px",
+                            maxWidth: "35%",
+                            overflowWrap: "break-word",
+                          }}
+                        >
+                          {formatDate(item.modified_ms)}
+                        </div>
+                      </div>
                     ) : (
-                      <div>
-                        <span className="name">
-                          {getIcon(item, 18)} {highlightText(item.name)}
-                        </span>
+                      <div className="d-flex align-items-center gap-2">
+                        {getIcon(item, 18)}
+                        <span>{highlightText(item.name)}</span>
                       </div>
                     )}
                   </div>
