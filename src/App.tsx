@@ -11,7 +11,7 @@ import {
   Video,
   Archive,
 } from "lucide-react";
-import { Event, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { BootstrapToastContainer, showToast } from "./Toast";
 
 type ViewMode = "large-icons" | "icons" | "details" | "list";
@@ -127,17 +127,7 @@ export function App() {
 
   const [containerWidth, setContainerWidth] = useState(0);
 
-  async function listenFolderChanged() {
-    await listen("file-system-event", (e: Event<FsEventPayload>) => {
-      if (e.payload?.kind !== "undefined" && e.payload?.kind !== undefined) {
-        showToast(
-          "타 어플에서 폴더 내용 변경 감지: " + e.payload?.kind,
-          "success",
-        );
-        refresh();
-      }
-    });
-  }
+  const currentDirRef = useRef<string>("");
 
   async function loadDir(path: string) {
     setLoading(true);
@@ -168,8 +158,8 @@ export function App() {
     }
   }
 
-  async function refresh() {
-    if (currentPath) await loadDir(currentPath);
+  async function refresh(dir = currentDirRef.current) {
+    if (dir) await loadDir(dir);
   }
 
   async function goParent() {
@@ -282,8 +272,37 @@ export function App() {
   });
 
   useEffect(() => {
-    listenFolderChanged();
+    currentDirRef.current = currentPath;
   }, [currentPath]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let mounted = true;
+
+    (async () => {
+      const fn = await listen<FsEventPayload>("file-system-event", (e) => {
+        if (!mounted) return;
+        if (!e.payload?.kind) return;
+
+        showToast(
+          `타 어플에서 폴더 내용 변경 감지: ${e.payload.kind}`,
+          "success",
+        );
+        refresh(currentDirRef.current);
+      });
+
+      if (mounted) {
+        unlisten = fn;
+      } else {
+        fn();
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     const startPath = "C:\\";
@@ -395,7 +414,7 @@ export function App() {
             </button>
             <button
               className="btn btn-outline-secondary"
-              onClick={refresh}
+              onClick={()=>refresh()}
               disabled={!currentPath}
             >
               새로고침

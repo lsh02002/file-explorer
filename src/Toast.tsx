@@ -15,6 +15,7 @@ export const BootstrapToastContainer = (props: ToastContainerProps) => (
     autoClose={3000}
     hideProgressBar
     closeOnClick
+    pauseOnFocusLoss={false}
     pauseOnHover={false}
     limit={1}
     {...props}
