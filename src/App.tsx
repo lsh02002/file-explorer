@@ -316,7 +316,7 @@ export function App() {
         .btn {
           font-size: 0.875rem;
           padding: 5px;
-        }        
+        }
       `}
       </style>
       <main className="d-flex vh-100 bg-light text-dark small">
