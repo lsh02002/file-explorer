@@ -11,6 +11,8 @@ import {
   Video,
   Archive,
 } from "lucide-react";
+import { Event, listen } from "@tauri-apps/api/event";
+import { BootstrapToastContainer, showToast } from "./Toast";
 
 type ViewMode = "large-icons" | "icons" | "details" | "list";
 
@@ -21,6 +23,11 @@ type FileItem = {
   size: number | null;
   extension: string | null;
   modified_ms: number | null;
+};
+
+type FsEventPayload = {
+  kind: string;
+  paths: string[];
 };
 
 type SortKey = "name" | "size" | "modified";
@@ -120,12 +127,25 @@ export function App() {
 
   const [containerWidth, setContainerWidth] = useState(0);
 
+  async function listenFolderChanged() {
+    await listen("file-system-event", (e: Event<FsEventPayload>) => {
+      if (e.payload?.kind !== "undefined" && e.payload?.kind !== undefined) {
+        showToast(
+          "타 어플에서 폴더 내용 변경 감지: " + e.payload?.kind,
+          "success",
+        );
+        refresh();
+      }
+    });
+  }
+
   async function loadDir(path: string) {
     setLoading(true);
     setError("");
 
     try {
       const result = await invoke<FileItem[]>("list_dir", { path });
+      await invoke("switch_watch_dir", { dir: path });
       setItems(result);
       setCurrentPath(path);
       setSelected(null);
@@ -260,6 +280,10 @@ export function App() {
     measureElement: (el) => el?.getBoundingClientRect().height ?? 40,
     overscan: 80,
   });
+
+  useEffect(() => {
+    listenFolderChanged();
+  }, [currentPath]);
 
   useEffect(() => {
     const startPath = "C:\\";
@@ -612,6 +636,7 @@ export function App() {
           )}
         </section>
       </main>
+      <BootstrapToastContainer />
     </>
   );
 }
