@@ -37,6 +37,66 @@ fn safe_child_path(dir: &str, name: &str) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
+fn list_folders(path: String) -> Result<Vec<FileItem>, String> {
+    let mut items = Vec::new();
+
+    let read_dir =
+        fs::read_dir(&path).map_err(|e| format!("디렉터리를 읽을 수 없습니다: {e}"))?;
+
+    for entry in read_dir {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => continue,
+        };
+
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(_) => continue,
+        };
+
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(_) => continue,
+        };
+
+        let modified_ms = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_millis());
+
+        let entry_path = entry.path();
+
+        let has_children = fs::read_dir(&entry_path)
+            .map(|mut children| {
+                children.any(|child| {
+                    child
+                        .ok()
+                        .and_then(|child| child.file_type().ok())
+                        .is_some_and(|ft| ft.is_dir())
+                })
+            })
+            .unwrap_or(false);
+
+        items.push(FileItem {
+            name: entry.file_name().to_string_lossy().to_string(),
+            path: entry_path.to_string_lossy().to_string(),
+            is_dir: true,
+            size: None,
+            extension: None,
+            modified_ms,
+            has_children,
+        });
+    }
+
+    Ok(items)
+}
+
+#[tauri::command]
 fn list_dir(path: String) -> Result<Vec<FileItem>, String> {
     let mut items = Vec::new();
     let read_dir = fs::read_dir(&path).map_err(|e| format!("디렉터리를 읽을 수 없습니다: {e}"))?;
@@ -63,25 +123,6 @@ fn list_dir(path: String) -> Result<Vec<FileItem>, String> {
             .and_then(|e| e.to_str())
             .map(|s| s.to_string());
 
-        let entry_path = entry.path();
-
-        let is_dir = metadata.is_dir();
-
-        let has_children = if is_dir {
-            fs::read_dir(&entry_path)
-                .map(|mut children| {
-                    children.any(|child| {
-                        child
-                            .ok()
-                            .and_then(|child| child.metadata().ok())
-                            .is_some_and(|metadata| metadata.is_dir())
-                    })
-                })
-                .unwrap_or(false)
-        } else {
-            false
-        };
-
         items.push(FileItem {
             name: file_name,
             path: entry.path().to_string_lossy().to_string(),
@@ -89,7 +130,7 @@ fn list_dir(path: String) -> Result<Vec<FileItem>, String> {
             size: if metadata.is_file() { Some(metadata.len()) } else { None },
             extension,
             modified_ms,
-            has_children,
+            has_children: false,
         });
     }
 
@@ -221,6 +262,7 @@ pub fn run() {
             watcher: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            list_folders,
             list_dir,
             create_file,
             create_dir,

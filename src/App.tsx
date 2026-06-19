@@ -158,7 +158,7 @@ export function App() {
   }
 
   async function loadChildFolders(path: string) {
-    const result = await invoke<FileItem[]>("list_dir", { path });
+    const result = await invoke<FileItem[]>("list_folders", { path });
 
     return result
       .filter((item) => item.is_dir)
