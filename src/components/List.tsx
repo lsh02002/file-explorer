@@ -1,7 +1,7 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
-import type { RefObject, ReactNode } from "react";
+import type { RefObject } from "react";
 import { FileItem, ViewMode } from "./Type";
-import { formatDate, formatSize, getIcon } from "./Utils";
+import { formatDate, formatSize, getIcon, highlightText } from "./Utils";
 
 type Props = {
   viewMode: ViewMode;
@@ -22,7 +22,6 @@ type Props = {
 
   setSelected: (item: FileItem) => void;
   loadDir: (path: string) => void | Promise<void>;
-  highlightText: (text: string, query: string) => ReactNode;
 };
 
 export default function FileList({
@@ -40,7 +39,6 @@ export default function FileList({
   query,
   setSelected,
   loadDir,
-  highlightText,
 }: Props) {
   return (
     <>

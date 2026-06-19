@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { BootstrapToastContainer, showToast } from "./components/Toast";
 import { FileItem, FsEventPayload, SortKey, ViewMode } from "./components/Type";
-import { highlightText, parentPath } from "./components/Utils";
+import { parentPath } from "./components/Utils";
 import Tree, { useTree } from "./components/Tree";
 import Toolbar from "./components/Toolbar";
 import FileList from "./components/List";
@@ -331,7 +331,6 @@ export function App() {
             query={query}
             setSelected={setSelected}
             loadDir={loadDir}
-            highlightText={highlightText}
           />
         </section>
       </main>
