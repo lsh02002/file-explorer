@@ -157,14 +157,6 @@ export function App() {
     });
   }, [items, query, sortKey]);
 
-  const rowVirtualizer = useVirtualizer({
-    count: visibleItems.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 40,
-    measureElement: (el) => el?.getBoundingClientRect().height ?? 40,
-    overscan: 80,
-  });
-
   useEffect(() => {
     currentDirRef.current = currentPath;
   }, [currentPath]);
@@ -225,12 +217,51 @@ export function App() {
   const columnCount = Math.max(1, Math.floor(containerWidth / cardWidth));
   const rowCount = Math.ceil(visibleItems.length / columnCount);
 
+  const selectedIndex = useMemo(() => {
+    if (!selected) return -1;
+    return visibleItems.findIndex((item) => item.path === selected.path);
+  }, [selected, visibleItems]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: visibleItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 40,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 40,
+    overscan: 80,
+  });
+
   const iconVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => iconListRef.current,
     estimateSize: () => rowHeight,
     overscan: 10,
   });
+
+  useEffect(() => {
+    if (selectedIndex < 0) return;
+
+    if (viewMode === "details") {
+      rowVirtualizer.scrollToIndex(selectedIndex, {
+        align: "auto",
+        behavior: "auto",
+      });
+
+      requestAnimationFrame(() => {
+        rowVirtualizer.scrollToIndex(selectedIndex, {
+          align: "auto",
+        });
+      });
+
+      return;
+    }
+
+    const iconRowIndex = Math.floor(selectedIndex / columnCount);
+
+    iconVirtualizer.scrollToIndex(iconRowIndex, {
+      align: "auto",
+      behavior: "auto",
+    });
+  }, [selectedIndex, viewMode, columnCount, rowVirtualizer, iconVirtualizer]);
 
   const regex = useMemo(() => {
     if (!query.trim()) return null;
