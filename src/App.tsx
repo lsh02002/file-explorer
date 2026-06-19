@@ -291,7 +291,7 @@ export function App() {
             currentPath={currentPath}
             selected={!!selected}
             goParent={goParent}
-            refresh={refresh}
+            refresh={() => refresh()}
             create={create}
             renameSelected={renameSelected}
             deleteSelected={deleteSelected}
