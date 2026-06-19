@@ -18,10 +18,11 @@ type Props = {
   cardWidth: number;
   rowHeight: number;
   iconSize: number;
+  query: string;
 
   setSelected: (item: FileItem) => void;
   loadDir: (path: string) => void | Promise<void>;
-  highlightText: (text: string) => ReactNode;
+  highlightText: (text: string, query: string) => ReactNode;
 };
 
 export default function FileList({
@@ -36,6 +37,7 @@ export default function FileList({
   cardWidth,
   rowHeight,
   iconSize,
+  query,
   setSelected,
   loadDir,
   highlightText,
@@ -111,7 +113,7 @@ export default function FileList({
                           WebkitBoxOrient: "vertical",
                         }}
                       >
-                        {highlightText(item.name)}
+                        {highlightText(item.name, query)}
                       </div>
                     </div>
                   ))}
@@ -154,7 +156,7 @@ export default function FileList({
                       <div className="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
                         {getIcon(item, 18)}
                         <span className="text-truncate">
-                          {highlightText(item.name)}
+                          {highlightText(item.name, query)}
                         </span>
                       </div>
 
@@ -180,7 +182,7 @@ export default function FileList({
                     <div className="d-flex align-items-center gap-2 overflow-hidden">
                       {getIcon(item, 18)}
                       <span className="text-truncate">
-                        {highlightText(item.name)}
+                        {highlightText(item.name, query)}
                       </span>
                     </div>
                   )}

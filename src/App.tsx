@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { BootstrapToastContainer, showToast } from "./components/Toast";
 import { FileItem, FsEventPayload, SortKey, ViewMode } from "./components/Type";
-import { parentPath } from "./components/Utils";
+import { highlightText, parentPath } from "./components/Utils";
 import Tree, { useTree } from "./components/Tree";
 import Toolbar from "./components/Toolbar";
 import FileList from "./components/List";
@@ -263,22 +263,6 @@ export function App() {
     });
   }, [selectedIndex, viewMode, columnCount, rowVirtualizer, iconVirtualizer]);
 
-  const regex = useMemo(() => {
-    if (!query.trim()) return null;
-    const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(${escaped})`, "gi");
-  }, [query]);
-
-  const highlightText = (text: string) => {
-    if (!regex) return text;
-
-    return text
-      .split(regex)
-      .map((part, index) =>
-        regex.test(part) ? <mark key={index}>{part}</mark> : part,
-      );
-  };
-
   return (
     <>
       <style>
@@ -344,6 +328,7 @@ export function App() {
             cardWidth={cardWidth}
             rowHeight={rowHeight}
             iconSize={iconSize}
+            query={query}
             setSelected={setSelected}
             loadDir={loadDir}
             highlightText={highlightText}

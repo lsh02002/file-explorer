@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import {
   Folder,
   File,
@@ -83,4 +84,22 @@ export function getIcon(item: FileItem, size: number) {
     default:
       return <File size={size} />;
   }
+}
+
+export function highlightText(text: string, query: string): ReactNode {
+  const trimmed = query.trim();
+
+  if (!trimmed) {
+    return text;
+  }
+
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  const regex = new RegExp(`(${escaped})`, "gi");
+
+  return text
+    .split(regex)
+    .map((part, index) =>
+      regex.test(part) ? <mark key={index}>{part}</mark> : part,
+    );
 }
