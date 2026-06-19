@@ -23,6 +23,12 @@ type FileItem = {
   size: number | null;
   extension: string | null;
   modified_ms: number | null;
+  has_children: boolean;
+};
+
+type TreeNode = FileItem & {
+  children?: TreeNode[];
+  loaded?: boolean;
 };
 
 type FsEventPayload = {
@@ -129,6 +135,11 @@ export function App() {
 
   const currentDirRef = useRef<string>("");
 
+  const [tree, setTree] = useState<TreeNode[]>([]);
+  const [expandedFolders, setExpandedFolders] = useState<
+    Record<string, boolean>
+  >({});
+
   async function loadDir(path: string) {
     setLoading(true);
     setError("");
@@ -146,6 +157,94 @@ export function App() {
     }
   }
 
+  async function loadChildFolders(path: string) {
+    const result = await invoke<FileItem[]>("list_dir", { path });
+
+    return result
+      .filter((item) => item.is_dir)
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }),
+      )
+      .map((item) => ({
+        ...item,
+        children: [],
+        loaded: false,
+      }));
+  }
+
+  async function loadTreeRoot(path: string) {
+    if (!path) return;
+
+    const children = await loadChildFolders(path);
+
+    setTree([
+      {
+        name: path,
+        path,
+        is_dir: true,
+        size: null,
+        extension: null,
+        modified_ms: null,
+        has_children: children.length > 0,
+        children,
+        loaded: true,
+      },
+    ]);
+
+    setExpandedFolders((prev) => ({
+      ...prev,
+      [path]: true,
+    }));
+  }
+
+  function updateTreeChildren(
+    nodes: TreeNode[],
+    path: string,
+    children: TreeNode[],
+  ): TreeNode[] {
+    return nodes.map((node) => {
+      if (node.path === path) {
+        return {
+          ...node,
+          children,
+          loaded: true,
+        };
+      }
+
+      return {
+        ...node,
+        children: node.children
+          ? updateTreeChildren(node.children, path, children)
+          : node.children,
+      };
+    });
+  }
+
+  async function toggleTreeFolder(folder: TreeNode) {
+    if (!folder.has_children) return;
+
+    const isExpanded = expandedFolders[folder.path];
+
+    if (!isExpanded && !folder.loaded) {
+      try {
+        const children = await loadChildFolders(folder.path);
+
+        setTree((prev) => updateTreeChildren(prev, folder.path, children));
+      } catch (e) {
+        setError(String(e));
+        return;
+      }
+    }
+
+    setExpandedFolders((prev) => ({
+      ...prev,
+      [folder.path]: !prev[folder.path],
+    }));
+  }
+
   async function chooseFolder() {
     const selectedPath = await open({
       directory: true,
@@ -155,6 +254,7 @@ export function App() {
     if (typeof selectedPath === "string") {
       setRootPath(selectedPath);
       await loadDir(selectedPath);
+      await loadTreeRoot(selectedPath);
     }
   }
 
@@ -226,16 +326,69 @@ export function App() {
     }
   }
 
-  const folders = useMemo(() => {
-    return items
-      .filter((item) => item.is_dir)
-      .sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
-      );
-  }, [items]);
+  // const folders = useMemo(() => {
+  //   return items
+  //     .filter((item) => item.is_dir)
+  //     .sort((a, b) =>
+  //       a.name.localeCompare(b.name, undefined, {
+  //         numeric: true,
+  //         sensitivity: "base",
+  //       }),
+  //     );
+  // }, [items]);
+
+  function FolderTreeItem({
+    folder,
+    level = 0,
+  }: {
+    folder: TreeNode;
+    level?: number;
+  }) {
+    const isExpanded = expandedFolders[folder.path];
+    const hasChildren = folder.has_children;
+
+    return (
+      <>
+        <div
+          className={`py-2 pe-2 rounded d-flex align-items-center text-truncate ${
+            currentPath === folder.path ? "bg-primary text-white" : ""
+          }`}
+          style={{ paddingLeft: `${level * 20 + 8}px` }}
+        >
+          <span
+            className="me-1 d-inline-flex justify-content-center"
+            style={{ width: 16, flexShrink: 0 }}
+          >
+            {hasChildren && (
+              <span
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleTreeFolder(folder);
+                }}
+              >
+                {isExpanded ? "⌵" : ">"}
+              </span>
+            )}
+          </span>
+
+          <span
+            role="button"
+            className="text-truncate flex-grow-1"
+            onClick={() => loadDir(folder.path)}
+          >
+            📁 {folder.name}
+          </span>
+        </div>
+
+        {hasChildren &&
+          isExpanded &&
+          folder.children?.map((child) => (
+            <FolderTreeItem key={child.path} folder={child} level={level + 1} />
+          ))}
+      </>
+    );
+  }
 
   const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -307,7 +460,11 @@ export function App() {
   useEffect(() => {
     const startPath = "C:\\";
     setRootPath(startPath);
-    void loadDir(startPath);
+
+    void (async () => {
+      await loadDir(startPath);
+      await loadTreeRoot(startPath);
+    })();
   }, []);
 
   useEffect(() => {
@@ -388,17 +545,8 @@ export function App() {
           </div>
 
           <div className="overflow-auto flex-grow-1">
-            {folders.map((folder) => (
-              <div
-                key={folder.path}
-                className={`p-2 rounded text-truncate ${
-                  currentPath === folder.path ? "bg-primary text-white" : ""
-                }`}
-                role="button"
-                onClick={() => loadDir(folder.path)}
-              >
-                📁 {folder.name}
-              </div>
+            {tree.map((folder) => (
+              <FolderTreeItem key={folder.path} folder={folder} />
             ))}
           </div>
         </aside>
@@ -414,7 +562,7 @@ export function App() {
             </button>
             <button
               className="btn btn-outline-secondary"
-              onClick={()=>refresh()}
+              onClick={() => refresh()}
               disabled={!currentPath}
             >
               새로고침

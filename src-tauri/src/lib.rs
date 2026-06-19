@@ -16,6 +16,7 @@ struct FileItem {
     size: Option<u64>,
     extension: Option<String>,
     modified_ms: Option<u128>,
+    has_children: bool,
 }
 
 struct WatchState {
@@ -62,6 +63,25 @@ fn list_dir(path: String) -> Result<Vec<FileItem>, String> {
             .and_then(|e| e.to_str())
             .map(|s| s.to_string());
 
+        let entry_path = entry.path();
+
+        let is_dir = metadata.is_dir();
+
+        let has_children = if is_dir {
+            fs::read_dir(&entry_path)
+                .map(|mut children| {
+                    children.any(|child| {
+                        child
+                            .ok()
+                            .and_then(|child| child.metadata().ok())
+                            .is_some_and(|metadata| metadata.is_dir())
+                    })
+                })
+                .unwrap_or(false)
+        } else {
+            false
+        };
+
         items.push(FileItem {
             name: file_name,
             path: entry.path().to_string_lossy().to_string(),
@@ -69,6 +89,7 @@ fn list_dir(path: String) -> Result<Vec<FileItem>, String> {
             size: if metadata.is_file() { Some(metadata.len()) } else { None },
             extension,
             modified_ms,
+            has_children,
         });
     }
 
