@@ -3,7 +3,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}},
-    time::{UNIX_EPOCH},    
+    time::{UNIX_EPOCH},
+    collections::HashSet
 };
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, State};
@@ -21,6 +22,7 @@ struct FileItem {
 
 struct WatchState {
     watcher: Mutex<Option<RecommendedWatcher>>,
+    ignore_paths: Arc<Mutex<HashSet<PathBuf>>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -138,8 +140,14 @@ fn list_dir(path: String) -> Result<Vec<FileItem>, String> {
 }
 
 #[tauri::command]
-fn create_file(dir: String, name: String) -> Result<(), String> {
+fn create_file(state: State<WatchState>, dir: String, name: String) -> Result<(), String> {
     let path = safe_child_path(&dir, &name)?;
+
+    {
+        let mut ignore = state.ignore_paths.lock().unwrap();
+        ignore.insert(path.clone());
+    }
+
     fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -149,25 +157,43 @@ fn create_file(dir: String, name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn create_dir(dir: String, name: String) -> Result<(), String> {
+fn create_dir(state: State<WatchState>, dir: String, name: String) -> Result<(), String> {
     let path = safe_child_path(&dir, &name)?;
+
+    {
+        let mut ignore = state.ignore_paths.lock().unwrap();
+        ignore.insert(path.clone());
+    }
+
     fs::create_dir(path).map_err(|e| format!("폴더를 만들 수 없습니다: {e}"))
 }
 
 #[tauri::command]
-fn rename_path(path: String, new_name: String) -> Result<(), String> {
+fn rename_path(state: State<WatchState>, path: String, new_name: String) -> Result<(), String> {
     let old_path = PathBuf::from(&path);
     let parent = old_path.parent().ok_or("상위 경로를 찾을 수 없습니다.")?;
     let new_path = safe_child_path(&parent.to_string_lossy(), &new_name)?;
+
+    {
+        let mut ignore = state.ignore_paths.lock().unwrap();
+        ignore.insert(old_path.clone());
+        ignore.insert(new_path.clone());
+    }
+
     fs::rename(old_path, new_path).map_err(|e| format!("이름을 변경할 수 없습니다: {e}"))
 }
 
 #[tauri::command]
-fn delete_path(path: String) -> Result<(), String> {
+fn delete_path(state: State<WatchState>, path: String) -> Result<(), String> {
     let p = Path::new(&path);
 
     if !p.exists() {
         return Err("파일 또는 폴더가 존재하지 않습니다.".into());
+    }
+
+    {
+        let mut ignore = state.ignore_paths.lock().unwrap();
+        ignore.insert(p.to_path_buf());
     }
 
     trash::delete(p)
@@ -197,11 +223,20 @@ fn switch_watch_dir(
     let modify_sent_clone = modify_sent.clone();
     let remove_sent_clone = remove_sent.clone();
 
+    let ignore_paths = state.ignore_paths.clone();
+
     let mut watcher = notify::recommended_watcher(
         move |res: notify::Result<notify::Event>| {
             let Ok(event) = res else {
                 return;
             };
+
+            {
+                let mut ignore = ignore_paths.lock().unwrap();
+                if event.paths.iter().any(|p| ignore.remove(p)) {
+                    return;
+                }
+            }
 
             let kind = match event.kind {
                 notify::EventKind::Create(_) => {
@@ -260,6 +295,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(WatchState {
             watcher: Mutex::new(None),
+            ignore_paths: Arc::new(Mutex::new(HashSet::new())),
         })
         .invoke_handler(tauri::generate_handler![
             list_folders,
