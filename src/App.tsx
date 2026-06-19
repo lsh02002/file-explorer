@@ -4,19 +4,12 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { BootstrapToastContainer, showToast } from "./components/Toast";
-import {
-  FileItem,
-  FsEventPayload,
-  SortKey,
-  TreeNode,
-  ViewMode,
-} from "./components/Type";
-import {
-  formatDate,
-  formatSize,
-  getIcon,
-  parentPath,
-} from "./components/Utils";
+import { FileItem, FsEventPayload, SortKey, ViewMode } from "./components/Type";
+import { parentPath } from "./components/Utils";
+import Tree, { useTree } from "./components/Tree";
+import Toolbar from "./components/Toolbar";
+import FileList from "./components/List";
+import ExplorerControls from "./components/ExplorerControls";
 
 export function App() {
   const [rootPath, setRootPath] = useState("");
@@ -29,10 +22,8 @@ export function App() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [viewMode, setViewMode] = useState<ViewMode>("details");
 
-  const [tree, setTree] = useState<TreeNode[]>([]);
-  const [expandedFolders, setExpandedFolders] = useState<
-    Record<string, boolean>
-  >({});
+  const { tree, expandedFolders, loadTreeRoot, toggleTreeFolder } =
+    useTree(setError);
 
   const iconSize = viewMode === "large-icons" ? 64 : 32;
   const cardWidth = viewMode === "large-icons" ? 140 : 96;
@@ -59,94 +50,6 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function loadChildFolders(path: string) {
-    const result = await invoke<FileItem[]>("list_folders", { path });
-
-    return result
-      .filter((item) => item.is_dir)
-      .sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }),
-      )
-      .map((item) => ({
-        ...item,
-        children: [],
-        loaded: false,
-      }));
-  }
-
-  async function loadTreeRoot(path: string) {
-    if (!path) return;
-
-    const children = await loadChildFolders(path);
-
-    setTree([
-      {
-        name: path,
-        path,
-        is_dir: true,
-        size: null,
-        extension: null,
-        modified_ms: null,
-        has_children: children.length > 0,
-        children,
-        loaded: true,
-      },
-    ]);
-
-    setExpandedFolders((prev) => ({
-      ...prev,
-      [path]: true,
-    }));
-  }
-
-  function updateTreeChildren(
-    nodes: TreeNode[],
-    path: string,
-    children: TreeNode[],
-  ): TreeNode[] {
-    return nodes.map((node) => {
-      if (node.path === path) {
-        return {
-          ...node,
-          children,
-          loaded: true,
-        };
-      }
-
-      return {
-        ...node,
-        children: node.children
-          ? updateTreeChildren(node.children, path, children)
-          : node.children,
-      };
-    });
-  }
-
-  async function toggleTreeFolder(folder: TreeNode) {
-    if (!folder.has_children) return;
-
-    const isExpanded = expandedFolders[folder.path];
-
-    if (!isExpanded && !folder.loaded) {
-      try {
-        const children = await loadChildFolders(folder.path);
-
-        setTree((prev) => updateTreeChildren(prev, folder.path, children));
-      } catch (e) {
-        setError(String(e));
-        return;
-      }
-    }
-
-    setExpandedFolders((prev) => ({
-      ...prev,
-      [folder.path]: !prev[folder.path],
-    }));
   }
 
   async function chooseFolder() {
@@ -345,59 +248,6 @@ export function App() {
       );
   };
 
-  function FolderTreeItem({
-    folder,
-    level = 0,
-  }: {
-    folder: TreeNode;
-    level?: number;
-  }) {
-    const isExpanded = expandedFolders[folder.path];
-    const hasChildren = folder.has_children;
-
-    return (
-      <>
-        <div
-          className={`py-2 pe-2 rounded d-flex align-items-center text-truncate ${
-            currentPath === folder.path ? "bg-primary text-white" : ""
-          }`}
-          style={{ paddingLeft: `${level * 20 + 8}px` }}
-        >
-          <span
-            className="me-1 d-inline-flex justify-content-center"
-            style={{ width: 16, flexShrink: 0 }}
-          >
-            {hasChildren && (
-              <span
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleTreeFolder(folder);
-                }}
-              >
-                {isExpanded ? "⌵" : ">"}
-              </span>
-            )}
-          </span>
-
-          <span
-            role="button"
-            className="text-truncate flex-grow-1"
-            onClick={() => loadDir(folder.path)}
-          >
-            📁 {folder.name}
-          </span>
-        </div>
-
-        {hasChildren &&
-          isExpanded &&
-          folder.children?.map((child) => (
-            <FolderTreeItem key={child.path} folder={child} level={level + 1} />
-          ))}
-      </>
-    );
-  }
-
   return (
     <>
       <style>
@@ -411,127 +261,39 @@ export function App() {
       `}
       </style>
       <main className="d-flex vh-100 bg-light text-dark small">
-        <aside
-          className="border-end bg-white p-3 d-flex flex-column"
-          style={{ width: 260, height: "100%" }}
-        >
-          <button
-            className="btn btn-outline-secondary w-100 mb-3"
-            onClick={chooseFolder}
-          >
-            폴더 열기
-          </button>
-
-          <div
-            className={`p-2 rounded cursor-pointer ${
-              currentPath === rootPath ? "bg-primary text-white" : "bg-light"
-            }`}
-            onClick={() => rootPath && loadDir(rootPath)}
-          >
-            📁 {rootPath || "폴더를 선택하세요"}
-          </div>
-
-          <div className="mt-3 mb-2 fw-bold text-secondary small">
-            하위 폴더
-          </div>
-
-          <div className="overflow-auto flex-grow-1">
-            {tree.map((folder) => (
-              <FolderTreeItem key={folder.path} folder={folder} />
-            ))}
-          </div>
-        </aside>
+        <Tree
+          rootPath={rootPath}
+          currentPath={currentPath}
+          tree={tree}
+          expandedFolders={expandedFolders}
+          loadDir={loadDir}
+          chooseFolder={chooseFolder}
+          toggleTreeFolder={toggleTreeFolder}
+        />
 
         <section className="d-flex flex-column flex-grow-1 overflow-hidden">
-          <header className="d-flex flex-wrap gap-2 p-3 bg-white border-bottom">
-            <button
-              className="btn btn-outline-secondary"
-              onClick={goParent}
-              disabled={!currentPath}
-            >
-              상위
-            </button>
-            <button
-              className="btn btn-outline-secondary"
-              onClick={() => refresh()}
-              disabled={!currentPath}
-            >
-              새로고침
-            </button>
-            <button
-              className="btn btn-outline-secondary"
-              onClick={() => create("file")}
-              disabled={!currentPath}
-            >
-              파일 생성
-            </button>
-            <button
-              className="btn btn-outline-secondary"
-              onClick={() => create("dir")}
-              disabled={!currentPath}
-            >
-              폴더 생성
-            </button>
-            <button
-              className="btn btn-outline-secondary"
-              onClick={renameSelected}
-              disabled={!selected}
-            >
-              이름 변경
-            </button>
-            <button
-              className="btn btn-outline-danger"
-              onClick={deleteSelected}
-              disabled={!selected}
-            >
-              삭제
-            </button>
-          </header>
+          <Toolbar
+            currentPath={currentPath}
+            selected={!!selected}
+            goParent={goParent}
+            refresh={() => refresh()}
+            create={create}
+            renameSelected={renameSelected}
+            deleteSelected={deleteSelected}
+          />
 
-          <section className="px-3 py-2 bg-body-tertiary border-bottom">
-            <strong>현재:</strong>{" "}
-            <span>{currentPath || "폴더를 선택하세요"}</span>
-          </section>
-
-          <section className="d-flex gap-2 align-items-center p-2 bg-white border-bottom">
-            <input
-              className="form-control"
-              placeholder="현재 폴더에서 검색"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </section>
-
-          <section className="d-flex gap-2 align-items-center p-2 bg-white border-bottom">
-            <select
-              className="form-select"
-              style={{ width: 140 }}
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as SortKey)}
-            >
-              <option value="name">이름순</option>
-              <option value="size">크기순</option>
-              <option value="modified">수정일순</option>
-            </select>
-
-            <select
-              className="form-select"
-              style={{ width: 150 }}
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value as ViewMode)}
-            >
-              <option value="large-icons">큰 아이콘</option>
-              <option value="icons">보통 아이콘</option>
-              <option value="details">자세히</option>
-              <option value="list">간단히</option>
-            </select>
-
-            <span className="text-secondary">
-              {loading
-                ? "로딩 중..."
-                : `${visibleItems.length.toLocaleString()}개 표시 / ${items.length.toLocaleString()}개 전체`}
-            </span>
-          </section>
+          <ExplorerControls
+            currentPath={currentPath}
+            query={query}
+            sortKey={sortKey}
+            viewMode={viewMode}
+            loading={loading}
+            visibleCount={visibleItems.length}
+            totalCount={items.length}
+            setQuery={setQuery}
+            setSortKey={setSortKey}
+            setViewMode={setViewMode}
+          />
 
           {error && (
             <section className="bg-white border-bottom fw-semibold small">
@@ -539,159 +301,22 @@ export function App() {
             </section>
           )}
 
-          {viewMode === "details" && (
-            <section className="bg-light border-bottom fw-semibold px-3 py-2">
-              <div className="row g-0">
-                <div className="col">이름</div>
-                <div className="col-2">크기</div>
-                <div className="col-3">수정일</div>
-              </div>
-            </section>
-          )}
-
-          {viewMode === "large-icons" || viewMode === "icons" ? (
-            <section
-              ref={iconListRef}
-              className={`iconView ${viewMode} flex-grow-1 overflow-auto bg-white`}
-            >
-              <div
-                style={{
-                  height: `${iconVirtualizer.getTotalSize()}px`,
-                  position: "relative",
-                  width: "100%",
-                }}
-              >
-                {iconVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const rowIndex = virtualRow.index;
-                  const startIndex = rowIndex * columnCount;
-                  const rowItems = visibleItems.slice(
-                    startIndex,
-                    startIndex + columnCount,
-                  );
-
-                  return (
-                    <div
-                      key={virtualRow.key}
-                      className="position-absolute top-0 start-0 w-100 d-grid gap-3 px-3 py-2"
-                      style={{
-                        height: `${rowHeight}px`,
-                        transform: `translateY(${virtualRow.start}px)`,
-                        gridTemplateColumns: `repeat(${columnCount}, ${cardWidth}px)`,
-                      }}
-                    >
-                      {rowItems.map((item) => (
-                        <div
-                          key={item.path}
-                          className={`card border-0 h-100 p-2 text-center rounded-3 ${
-                            selected?.path === item.path
-                              ? "bg-primary-subtle"
-                              : "bg-white"
-                          }`}
-                          role="button"
-                          onClick={() => setSelected(item)}
-                          onDoubleClick={() =>
-                            item.is_dir && loadDir(item.path)
-                          }
-                        >
-                          <div
-                            className="d-flex align-items-center justify-content-center"
-                            style={{
-                              height: viewMode === "large-icons" ? 70 : 38,
-                            }}
-                          >
-                            {getIcon(item, iconSize)}
-                          </div>
-
-                          <div
-                            className="mt-2 text-break overflow-hidden"
-                            style={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                            }}
-                          >
-                            {highlightText(item.name)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ) : (
-            <section
-              ref={parentRef}
-              className={`flex-grow-1 overflow-auto bg-white}`}
-            >
-              <div
-                className="position-relative"
-                style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                }}
-              >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const item = visibleItems[virtualRow.index];
-
-                  return (
-                    <div
-                      key={item.path}
-                      data-index={virtualRow.index}
-                      ref={rowVirtualizer.measureElement}
-                      className={`position-absolute top-0 start-0 w-100 px-3 py-2 border-bottom ${
-                        selected?.path === item.path
-                          ? "bg-primary-subtle"
-                          : "bg-white"
-                      }`}
-                      role="button"
-                      style={{
-                        minHeight: `${virtualRow.size}px`,
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
-                      onClick={() => setSelected(item)}
-                      onDoubleClick={() => item.is_dir && loadDir(item.path)}
-                    >
-                      {viewMode === "details" ? (
-                        <div className="d-flex align-items-start gap-3">
-                          <div className="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
-                            {getIcon(item, 18)}
-                            <span className="text-truncate">
-                              {highlightText(item.name)}
-                            </span>
-                          </div>
-
-                          <div
-                            className="text-secondary flex-shrink-0 text-end"
-                            style={{ width: "120px" }}
-                          >
-                            {formatSize(item.size)}
-                          </div>
-
-                          <div
-                            className="text-secondary flex-shrink-0 text-wrap"
-                            style={{
-                              width: "220px",
-                              maxWidth: "35%",
-                              overflowWrap: "break-word",
-                            }}
-                          >
-                            {formatDate(item.modified_ms)}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="d-flex align-items-center gap-2 overflow-hidden">
-                          {getIcon(item, 18)}
-                          <span className="text-truncate">
-                            {highlightText(item.name)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+          <FileList
+            viewMode={viewMode}
+            visibleItems={visibleItems}
+            selected={selected}
+            iconListRef={iconListRef}
+            parentRef={parentRef}
+            iconVirtualizer={iconVirtualizer}
+            rowVirtualizer={rowVirtualizer}
+            columnCount={columnCount}
+            cardWidth={cardWidth}
+            rowHeight={rowHeight}
+            iconSize={iconSize}
+            setSelected={setSelected}
+            loadDir={loadDir}
+            highlightText={highlightText}
+          />
         </section>
       </main>
       <BootstrapToastContainer />
