@@ -2,117 +2,21 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Folder,
-  File,
-  Image,
-  FileText,
-  Music,
-  Video,
-  Archive,
-} from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
-import { BootstrapToastContainer, showToast } from "./Toast";
-
-type ViewMode = "large-icons" | "icons" | "details" | "list";
-
-type FileItem = {
-  name: string;
-  path: string;
-  is_dir: boolean;
-  size: number | null;
-  extension: string | null;
-  modified_ms: number | null;
-  has_children: boolean;
-};
-
-type TreeNode = FileItem & {
-  children?: TreeNode[];
-  loaded?: boolean;
-};
-
-type FsEventPayload = {
-  kind: string;
-  paths: string[];
-};
-
-type SortKey = "name" | "size" | "modified";
-
-function formatSize(size: number | null) {
-  if (size === null) return "—";
-  if (size < 1024) return `${size} B`;
-
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = size / 1024;
-  let unit = 0;
-
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-
-  return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unit]}`;
-}
-
-function formatDate(ms: number | null) {
-  if (ms === null) return "—";
-  return new Date(ms).toLocaleString();
-}
-
-function parentPath(path: string) {
-  const normalized = path.replace(/[\\/]+$/, "");
-
-  if (/^[A-Za-z]:$/.test(normalized)) {
-    return normalized + "\\";
-  }
-
-  if (/^[A-Za-z]:\\$/.test(path)) {
-    return path;
-  }
-
-  const idx = Math.max(
-    normalized.lastIndexOf("/"),
-    normalized.lastIndexOf("\\"),
-  );
-
-  if (idx <= 2) {
-    return normalized.slice(0, 2) + "\\";
-  }
-
-  return normalized.slice(0, idx);
-}
-
-function getIcon(item: FileItem, size: number) {
-  if (item.is_dir) {
-    return <Folder size={size} />;
-  }
-
-  const ext = item.extension?.split(".").pop()?.toLowerCase();
-
-  switch (ext) {
-    case "png":
-    case "jpg":
-    case "jpeg":
-      return <Image size={size} />;
-
-    case "txt":
-    case "md":
-      return <FileText size={size} />;
-
-    case "mp3":
-      return <Music size={size} />;
-
-    case "mp4":
-      return <Video size={size} />;
-
-    case "zip":
-    case "rar":
-      return <Archive size={size} />;
-
-    default:
-      return <File size={size} />;
-  }
-}
+import { BootstrapToastContainer, showToast } from "./components/Toast";
+import {
+  FileItem,
+  FsEventPayload,
+  SortKey,
+  TreeNode,
+  ViewMode,
+} from "./components/Type";
+import {
+  formatDate,
+  formatSize,
+  getIcon,
+  parentPath,
+} from "./components/Utils";
 
 export function App() {
   const [rootPath, setRootPath] = useState("");
@@ -125,7 +29,10 @@ export function App() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [viewMode, setViewMode] = useState<ViewMode>("details");
 
-  const iconListRef = useRef<HTMLDivElement>(null);
+  const [tree, setTree] = useState<TreeNode[]>([]);
+  const [expandedFolders, setExpandedFolders] = useState<
+    Record<string, boolean>
+  >({});
 
   const iconSize = viewMode === "large-icons" ? 64 : 32;
   const cardWidth = viewMode === "large-icons" ? 140 : 96;
@@ -133,12 +40,9 @@ export function App() {
 
   const [containerWidth, setContainerWidth] = useState(0);
 
+  const iconListRef = useRef<HTMLDivElement>(null);
   const currentDirRef = useRef<string>("");
-
-  const [tree, setTree] = useState<TreeNode[]>([]);
-  const [expandedFolders, setExpandedFolders] = useState<
-    Record<string, boolean>
-  >({});
+  const parentRef = useRef<HTMLDivElement>(null);
 
   async function loadDir(path: string) {
     setLoading(true);
@@ -326,70 +230,6 @@ export function App() {
     }
   }
 
-  // const folders = useMemo(() => {
-  //   return items
-  //     .filter((item) => item.is_dir)
-  //     .sort((a, b) =>
-  //       a.name.localeCompare(b.name, undefined, {
-  //         numeric: true,
-  //         sensitivity: "base",
-  //       }),
-  //     );
-  // }, [items]);
-
-  function FolderTreeItem({
-    folder,
-    level = 0,
-  }: {
-    folder: TreeNode;
-    level?: number;
-  }) {
-    const isExpanded = expandedFolders[folder.path];
-    const hasChildren = folder.has_children;
-
-    return (
-      <>
-        <div
-          className={`py-2 pe-2 rounded d-flex align-items-center text-truncate ${
-            currentPath === folder.path ? "bg-primary text-white" : ""
-          }`}
-          style={{ paddingLeft: `${level * 20 + 8}px` }}
-        >
-          <span
-            className="me-1 d-inline-flex justify-content-center"
-            style={{ width: 16, flexShrink: 0 }}
-          >
-            {hasChildren && (
-              <span
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleTreeFolder(folder);
-                }}
-              >
-                {isExpanded ? "⌵" : ">"}
-              </span>
-            )}
-          </span>
-
-          <span
-            role="button"
-            className="text-truncate flex-grow-1"
-            onClick={() => loadDir(folder.path)}
-          >
-            📁 {folder.name}
-          </span>
-        </div>
-
-        {hasChildren &&
-          isExpanded &&
-          folder.children?.map((child) => (
-            <FolderTreeItem key={child.path} folder={child} level={level + 1} />
-          ))}
-      </>
-    );
-  }
-
   const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
@@ -413,8 +253,6 @@ export function App() {
       });
     });
   }, [items, query, sortKey]);
-
-  const parentRef = useRef<HTMLDivElement>(null);
 
   const rowVirtualizer = useVirtualizer({
     count: visibleItems.length,
@@ -506,6 +344,59 @@ export function App() {
         regex.test(part) ? <mark key={index}>{part}</mark> : part,
       );
   };
+
+  function FolderTreeItem({
+    folder,
+    level = 0,
+  }: {
+    folder: TreeNode;
+    level?: number;
+  }) {
+    const isExpanded = expandedFolders[folder.path];
+    const hasChildren = folder.has_children;
+
+    return (
+      <>
+        <div
+          className={`py-2 pe-2 rounded d-flex align-items-center text-truncate ${
+            currentPath === folder.path ? "bg-primary text-white" : ""
+          }`}
+          style={{ paddingLeft: `${level * 20 + 8}px` }}
+        >
+          <span
+            className="me-1 d-inline-flex justify-content-center"
+            style={{ width: 16, flexShrink: 0 }}
+          >
+            {hasChildren && (
+              <span
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleTreeFolder(folder);
+                }}
+              >
+                {isExpanded ? "⌵" : ">"}
+              </span>
+            )}
+          </span>
+
+          <span
+            role="button"
+            className="text-truncate flex-grow-1"
+            onClick={() => loadDir(folder.path)}
+          >
+            📁 {folder.name}
+          </span>
+        </div>
+
+        {hasChildren &&
+          isExpanded &&
+          folder.children?.map((child) => (
+            <FolderTreeItem key={child.path} folder={child} level={level + 1} />
+          ))}
+      </>
+    );
+  }
 
   return (
     <>
