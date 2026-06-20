@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FileItem, TreeNode } from "./Type";
 import { invoke } from "@tauri-apps/api/core";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 type Props = {
   rootPath: string;
@@ -22,6 +23,36 @@ export default function Tree({
   chooseFolder,
   toggleTreeFolder,
 }: Props) {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const flatTree = useMemo(() => {
+    const result: { folder: TreeNode; level: number }[] = [];
+
+    function walk(nodes: TreeNode[], level: number) {
+      for (const node of nodes) {
+        result.push({ folder: node, level });
+
+        if (
+          node.has_children &&
+          expandedFolders[node.path] &&
+          node.children?.length
+        ) {
+          walk(node.children, level + 1);
+        }
+      }
+    }
+
+    walk(tree, 0);
+    return result;
+  }, [tree, expandedFolders]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: flatTree.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 40,
+    overscan: 20,
+  });
+
   function FolderTreeItem({
     folder,
     level = 0,
@@ -33,45 +64,37 @@ export default function Tree({
     const hasChildren = folder.has_children;
 
     return (
-      <>
-        <div
-          className={`py-2 pe-2 rounded d-flex align-items-center text-truncate ${
-            currentPath === folder.path ? "bg-primary text-white" : ""
-          }`}
-          style={{ paddingLeft: `${level * 20 + 8}px` }}
+      <div
+        className={`py-2 pe-2 rounded d-flex align-items-center text-truncate ${
+          currentPath === folder.path ? "bg-primary text-white" : ""
+        }`}
+        style={{ paddingLeft: `${level * 20 + 8}px` }}
+      >
+        <span
+          className="me-1 d-inline-flex justify-content-center"
+          style={{ width: 16, flexShrink: 0 }}
         >
-          <span
-            className="me-1 d-inline-flex justify-content-center"
-            style={{ width: 16, flexShrink: 0 }}
-          >
-            {hasChildren && (
-              <span
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleTreeFolder(folder);
-                }}
-              >
-                {isExpanded ? "⌵" : ">"}
-              </span>
-            )}
-          </span>
+          {hasChildren && (
+            <span
+              role="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleTreeFolder(folder);
+              }}
+            >
+              {isExpanded ? "⌵" : ">"}
+            </span>
+          )}
+        </span>
 
-          <span
-            role="button"
-            className="text-truncate flex-grow-1"
-            onClick={() => loadDir(folder.path)}
-          >
-            📁 {folder.name}
-          </span>
-        </div>
-
-        {hasChildren &&
-          isExpanded &&
-          folder.children?.map((child) => (
-            <FolderTreeItem key={child.path} folder={child} level={level + 1} />
-          ))}
-      </>
+        <span
+          role="button"
+          className="text-truncate flex-grow-1"
+          onClick={() => loadDir(folder.path)}
+        >
+          📁 {folder.name}
+        </span>
+      </div>
     );
   }
 
@@ -98,10 +121,37 @@ export default function Tree({
 
       <div className="mt-3 mb-2 fw-bold text-secondary small">하위 폴더</div>
 
-      <div className="overflow-auto flex-grow-1">
-        {tree.map((folder) => (
-          <FolderTreeItem key={folder.path} folder={folder} />
-        ))}
+      <div ref={parentRef} className="overflow-auto flex-grow-1">
+        <div
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            position: "relative",
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const item = flatTree[virtualRow.index];
+            if (!item) return null;
+
+            const { folder, level } = item;
+
+            return (
+              <div
+                key={folder.path}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <FolderTreeItem folder={folder} level={level} />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </aside>
   );
@@ -124,7 +174,7 @@ export function useTree(setError: (message: string) => void) {
           sensitivity: "base",
         }),
       )
-      .map((item) => ({
+      .map<TreeNode>((item) => ({
         ...item,
         children: [],
         loaded: false,
@@ -134,26 +184,29 @@ export function useTree(setError: (message: string) => void) {
   async function loadTreeRoot(path: string) {
     if (!path) return;
 
-    const children = await loadChildFolders(path);
+    try {
+      const children = await loadChildFolders(path);
 
-    setTree([
-      {
-        name: path,
-        path,
-        is_dir: true,
-        size: null,
-        extension: null,
-        modified_ms: null,
-        has_children: children.length > 0,
-        children,
-        loaded: true,
-      },
-    ]);
+      setTree([
+        {
+          name: path,
+          path,
+          is_dir: true,
+          size: null,
+          extension: null,
+          modified_ms: null,
+          has_children: children.length > 0,
+          children,
+          loaded: true,
+        },
+      ]);
 
-    setExpandedFolders((prev) => ({
-      ...prev,
-      [path]: true,
-    }));
+      setExpandedFolders({
+        [path]: true,
+      });
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   function updateTreeChildren(
@@ -167,6 +220,7 @@ export function useTree(setError: (message: string) => void) {
           ...node,
           children,
           loaded: true,
+          has_children: children.length > 0,
         };
       }
 
