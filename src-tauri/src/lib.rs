@@ -99,7 +99,7 @@ fn list_folders(path: String) -> Result<Vec<FileItem>, String> {
 }
 
 #[tauri::command]
-fn list_dir(path: String) -> Result<Vec<FileItem>, String> {
+fn list_files(path: String) -> Result<Vec<FileItem>, String> {
     let mut items = Vec::new();
     let read_dir = fs::read_dir(&path).map_err(|e| format!("디렉터리를 읽을 수 없습니다: {e}"))?;
 
@@ -299,7 +299,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_folders,
-            list_dir,
+            list_files,
             create_file,
             create_dir,
             rename_path,

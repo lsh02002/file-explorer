@@ -40,7 +40,7 @@ export function App() {
     setError("");
 
     try {
-      const result = await invoke<FileItem[]>("list_dir", { path });
+      const result = await invoke<FileItem[]>("list_files", { path });
       await invoke("switch_watch_dir", { dir: path });
       setItems(result);
       setCurrentPath(path);
